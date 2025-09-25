@@ -140,22 +140,43 @@ st.markdown(
 # Environment variables
 CLIENT_ID = os.environ.get("CLIENT_ID")
 CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
-TENANT_ID = os.environ.get("TENANT_ID")
+TENANT_ID = os.environ.get("TENANT_ID")  # For Microsoft Entra ID
+KEYCLOAK_SERVER_URL = os.environ.get("KEYCLOAK_SERVER_URL")  # For Keycloak
+KEYCLOAK_REALM = os.environ.get("KEYCLOAK_REALM")  # For Keycloak
 SCOPE = os.environ.get("SCOPE", "openid profile email User.Read")
 REDIRECT_URI = os.environ.get("REDIRECT_URI", "http://localhost:8501/oauth2callback")
-BASE_URL = os.environ.get("BASE_URL", "https://login.microsoftonline.com")
+BASE_URL = os.environ.get("BASE_URL")
 PRODUCTS_AGENT_URL = os.environ.get("PRODUCTS_AGENT_URL", "http://localhost:8000")
+AUTH_PROVIDER = os.environ.get("AUTH_PROVIDER", "entra_id")  # 'entra_id' or 'keycloak'
 
-# Construct OAuth URLs dynamically from base URL and tenant ID
-if TENANT_ID and BASE_URL:
-    # Always construct URLs dynamically - no environment variable overrides
-    AUTHORIZE_URL = f"{BASE_URL}/{TENANT_ID}/oauth2/v2.0/authorize"
-    TOKEN_URL = f"{BASE_URL}/{TENANT_ID}/oauth2/v2.0/token"
-    REFRESH_TOKEN_URL = f"{BASE_URL}/{TENANT_ID}/oauth2/v2.0/token"
-    # Microsoft Entra ID doesn't have a standard token revocation endpoint
-    REVOKE_TOKEN_URL = None
-else:
-    AUTHORIZE_URL = TOKEN_URL = REFRESH_TOKEN_URL = REVOKE_TOKEN_URL = None
+# Construct OAuth URLs based on the authentication provider
+AUTHORIZE_URL = os.environ.get("AUTHORIZE_URL")
+TOKEN_URL = os.environ.get("TOKEN_URL")
+REFRESH_TOKEN_URL = os.environ.get("REFRESH_TOKEN_URL")
+REVOKE_TOKEN_URL = os.environ.get("REVOKE_TOKEN_URL")
+
+if not all([AUTHORIZE_URL, TOKEN_URL, REFRESH_TOKEN_URL]):
+    if AUTH_PROVIDER.lower() == "keycloak" and KEYCLOAK_SERVER_URL and KEYCLOAK_REALM:
+        # Keycloak URL construction
+        keycloak_base = f"{KEYCLOAK_SERVER_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect"
+        AUTHORIZE_URL = f"{keycloak_base}/auth"
+        TOKEN_URL = f"{keycloak_base}/token"
+        REFRESH_TOKEN_URL = f"{keycloak_base}/token"
+        REVOKE_TOKEN_URL = f"{keycloak_base}/revoke"
+        if not BASE_URL:
+            BASE_URL = KEYCLOAK_SERVER_URL
+    elif TENANT_ID and (BASE_URL or AUTH_PROVIDER.lower() == "entra_id"):
+        # Microsoft Entra ID URL construction (default behavior)
+        base_url = BASE_URL or "https://login.microsoftonline.com"
+        AUTHORIZE_URL = f"{base_url}/{TENANT_ID}/oauth2/v2.0/authorize"
+        TOKEN_URL = f"{base_url}/{TENANT_ID}/oauth2/v2.0/token"
+        REFRESH_TOKEN_URL = f"{base_url}/{TENANT_ID}/oauth2/v2.0/token"
+        # Microsoft Entra ID doesn't have a standard token revocation endpoint
+        REVOKE_TOKEN_URL = None
+        if not BASE_URL:
+            BASE_URL = base_url
+    else:
+        AUTHORIZE_URL = TOKEN_URL = REFRESH_TOKEN_URL = REVOKE_TOKEN_URL = None
 
 # Initialize session state for chat
 if "chat_messages" not in st.session_state:
@@ -540,7 +561,8 @@ def main():
     # Header with logout button
     col1, col2 = st.columns([4, 1])
     with col1:
-        st.title("🫆 Secure Agentic Demo: HCP Vault x Bedrock x Entra ID ")
+        provider_display = "Keycloak" if AUTH_PROVIDER.lower() == "keycloak" else "Entra ID"
+        st.title(f"🫆 Secure Agentic Demo: HCP Vault x Bedrock x {provider_display}")
     with col2:
         if "token" in st.session_state:
             st.markdown('<div class="logout-button">', unsafe_allow_html=True)
@@ -550,35 +572,102 @@ def main():
 
     st.markdown("---")
 
-    # Check configuration
+    # Check configuration based on authentication provider
     missing_config = []
     if not CLIENT_ID:
         missing_config.append("CLIENT_ID")
     if not CLIENT_SECRET:
         missing_config.append("CLIENT_SECRET")
-    if not TENANT_ID:
-        missing_config.append("TENANT_ID")
+    
+    if AUTH_PROVIDER.lower() == "keycloak":
+        if not KEYCLOAK_SERVER_URL:
+            missing_config.append("KEYCLOAK_SERVER_URL")
+        if not KEYCLOAK_REALM:
+            missing_config.append("KEYCLOAK_REALM")
+    else:  # Default to Entra ID
+        if not TENANT_ID:
+            missing_config.append("TENANT_ID")
 
     if missing_config:
         st.error(f"Missing required environment variables: {', '.join(missing_config)}")
-        st.info(
-            "Please create a .env file based on .env.example and fill in your Microsoft Entra ID configuration."
-        )
+        if AUTH_PROVIDER.lower() == "keycloak":
+            st.info(
+                "Please create a .env file based on .env.keycloak.example and fill in your Keycloak configuration."
+            )
+            with st.expander("💡 Keycloak Setup Help", expanded=True):
+                st.markdown("""
+                **Required Configuration:**
+                - `CLIENT_ID`: Your Keycloak client ID 
+                - `CLIENT_SECRET`: Your Keycloak client secret
+                - `KEYCLOAK_SERVER_URL`: Your Keycloak server URL (e.g., https://keycloak.yourdomain.com)  
+                - `KEYCLOAK_REALM`: Your Keycloak realm name
+                
+                **Quick Setup:**
+                1. Copy `.env.keycloak.example` to `.env`
+                2. Update with your Keycloak server details
+                3. Create a client in your Keycloak realm
+                4. Set redirect URI to: `http://localhost:8501/oauth2callback`
+                
+                📖 **See [KEYCLOAK.md](./KEYCLOAK.md) for detailed setup instructions**
+                """)
+        else:
+            st.info(
+                "Please create a .env file based on .env.example and fill in your Microsoft Entra ID configuration."
+            )
+            with st.expander("💡 Microsoft Entra ID Setup Help", expanded=True):
+                st.markdown("""
+                **Required Configuration:**
+                - `CLIENT_ID`: Your Azure AD application (client) ID
+                - `CLIENT_SECRET`: Your Azure AD client secret  
+                - `TENANT_ID`: Your Azure AD directory (tenant) ID
+                
+                **Quick Setup:**
+                1. Copy `.env.example` to `.env`
+                2. Register an application in Azure AD
+                3. Add redirect URI: `http://localhost:8501/oauth2callback`
+                4. Generate a client secret
+                5. Copy the IDs into your `.env` file
+                """)
+        st.stop()
+
+    # Validate OAuth URL construction
+    if not AUTHORIZE_URL or not TOKEN_URL:
+        st.error("❌ OAuth URL construction failed")
+        if AUTH_PROVIDER.lower() == "keycloak":
+            st.error("Could not construct Keycloak OAuth URLs. Please verify:")
+            st.markdown("""
+            - `KEYCLOAK_SERVER_URL` is a valid URL (e.g., https://keycloak.yourdomain.com)
+            - `KEYCLOAK_REALM` is specified
+            - URLs should not have trailing slashes
+            """)
+        else:
+            st.error("Could not construct Microsoft Entra ID OAuth URLs. Please verify:")
+            st.markdown("""
+            - `TENANT_ID` is specified
+            - `BASE_URL` is valid (or use default)
+            """)
         st.stop()
 
     # Authentication flow
     if "token" not in st.session_state:
         st.header("🚪 Authentication Required")
-        st.write(
-            "Please authenticate with Microsoft Entra ID to access the ProductsAgent chat."
-        )
+        provider_name = "Keycloak" if AUTH_PROVIDER.lower() == "keycloak" else "Microsoft Entra ID"
+        st.write(f"Please authenticate with {provider_name} to access the ProductsAgent chat.")
 
         with st.expander("ℹ️ Configuration Details", expanded=False):
+            st.write(f"**Authentication Provider:** {AUTH_PROVIDER}")
             st.write(f"**Client ID:** {CLIENT_ID}")
-            st.write(f"**Tenant ID:** {TENANT_ID}")
+            if AUTH_PROVIDER.lower() == "keycloak":
+                st.write(f"**Keycloak Server:** {KEYCLOAK_SERVER_URL}")
+                st.write(f"**Realm:** {KEYCLOAK_REALM}")
+            else:
+                st.write(f"**Tenant ID:** {TENANT_ID}")
             st.write(f"**Base URL:** {BASE_URL}")
             st.write(f"**Scopes:** {SCOPE}")
             st.write(f"**Products API:** {PRODUCTS_AGENT_URL}")
+            if AUTHORIZE_URL:
+                st.write(f"**Authorize URL:** {AUTHORIZE_URL}")
+                st.write(f"**Token URL:** {TOKEN_URL}")
 
         # Create OAuth2Component instance
         oauth2 = OAuth2Component(
@@ -591,8 +680,9 @@ def main():
         )
 
         # Authorization button
+        button_text = f"Login with {provider_name}"
         result = oauth2.authorize_button(
-            "Login with Microsoft",
+            button_text,
             REDIRECT_URI,
             SCOPE,
             height=600,

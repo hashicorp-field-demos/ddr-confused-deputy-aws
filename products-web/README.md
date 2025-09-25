@@ -1,14 +1,26 @@
 # Products Web - Streamlit Application
 
-A modern Streamlit web application that provides a secure interface for Microsoft Entra ID OAuth authentication integrated with an intelligent ProductsAgent chat system. This application serves as the frontend for interacting with AI-powered product management capabilities while demonstrating end-to-end authentication flows in a zero-trust architecture.
+A modern Streamlit web application that provides a secure interface for OAuth authentication integrated with an intelligent ProductsAgent chat system. This application serves as the frontend for interacting with AI-powered product management capabilities while demonstrating end-to-end authentication flows in a zero-trust architecture.
 
+## Supported Authentication Providers
+
+This application supports multiple OAuth2/OpenID Connect providers:
+
+- **Microsoft Entra ID** (Azure AD) - Default provider
+- **Keycloak** - Open-source identity and access management
+- **Custom OAuth2/OIDC** - Any compliant OAuth2 provider
+
+📖 **For Keycloak setup instructions, see [KEYCLOAK.md](./KEYCLOAK.md)**
 
 ## Prerequisites
 
 - Python 3.12 or higher
 - [uv](https://github.com/astral-sh/uv) package manager
 - Docker and Docker Compose (for containerized deployment)
-- Microsoft Entra ID tenant with configured application registration
+- Authentication provider:
+  - **Microsoft Entra ID**: tenant with configured application registration, OR
+  - **Keycloak**: server with configured client, OR  
+  - **Custom OAuth2**: provider with client credentials
 
 ## Local Development Setup
 
@@ -42,7 +54,11 @@ uv pip install -r requirements.txt
 uv pip install -e .
 ```
 
-### 3. Environment Configuration
+### 3. Authentication Provider Configuration
+
+Choose one of the supported authentication providers and create the appropriate configuration:
+
+#### Option A: Microsoft Entra ID (Default)
 
 Create a `.env` file with your Microsoft Entra ID configuration:
 
@@ -56,6 +72,61 @@ TENANT_ID=your_directory_tenant_id_here
 SCOPE=openid profile email  api://<ad_domain>.onmicrosoft.com/products-agent/Agent.Invoke
 REDIRECT_URI=http://localhost:8501/oauth2callback
 BASE_URL=https://login.microsoftonline.com
+
+# Authentication Provider (optional, defaults to entra_id)
+AUTH_PROVIDER=entra_id
+
+# ProductsAgent API Configuration
+PRODUCTS_AGENT_URL=http://localhost:8001
+```
+
+#### Option B: Keycloak
+
+Create a `.env` file with your Keycloak configuration:
+
+```env
+# Keycloak Client Configuration
+CLIENT_ID=products-web-client
+CLIENT_SECRET=your_keycloak_client_secret_here
+
+# Keycloak Server Configuration
+KEYCLOAK_SERVER_URL=https://keycloak.yourdomain.com
+KEYCLOAK_REALM=your-realm-name
+
+# OAuth Settings
+SCOPE=openid profile email
+REDIRECT_URI=http://localhost:8501/oauth2callback
+
+# Authentication Provider
+AUTH_PROVIDER=keycloak
+
+# ProductsAgent API Configuration  
+PRODUCTS_AGENT_URL=http://localhost:8001
+```
+
+📖 **For detailed Keycloak setup instructions, see [KEYCLOAK.md](./KEYCLOAK.md)**
+
+#### Option C: Custom OAuth2 Provider
+
+For other OAuth2/OIDC compliant providers, manually specify the endpoints:
+
+```env
+# Custom OAuth2 Provider Configuration
+CLIENT_ID=your_client_id
+CLIENT_SECRET=your_client_secret
+
+# Manual URL Configuration
+AUTHORIZE_URL=https://your-provider.com/oauth2/authorize
+TOKEN_URL=https://your-provider.com/oauth2/token
+REFRESH_TOKEN_URL=https://your-provider.com/oauth2/token
+REVOKE_TOKEN_URL=https://your-provider.com/oauth2/revoke
+
+# OAuth Settings
+SCOPE=openid profile email
+REDIRECT_URI=http://localhost:8501/oauth2callback
+
+# Authentication Provider
+AUTH_PROVIDER=custom
 
 # ProductsAgent API Configuration
 PRODUCTS_AGENT_URL=http://localhost:8001

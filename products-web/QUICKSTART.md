@@ -12,12 +12,29 @@ source .venv/bin/activate
 uv pip install streamlit streamlit-oauth "python-jose[cryptography]" python-dotenv requests cryptography
 ```
 
-### 2. Configure Environment
+### 2. Configure Authentication Provider
+
+Choose your preferred authentication provider:
+
+#### Option A: Microsoft Entra ID (Default)
 ```bash
-# Copy environment template
+# Copy environment template  
 cp .env.example .env
 
 # Edit .env with your Microsoft Entra ID credentials:
+# CLIENT_ID, CLIENT_SECRET, TENANT_ID
+```
+
+#### Option B: Keycloak
+```bash
+# Copy Keycloak environment template
+cp .env.keycloak.example .env
+
+# Edit .env with your Keycloak configuration:
+# CLIENT_ID, CLIENT_SECRET, KEYCLOAK_SERVER_URL, KEYCLOAK_REALM
+```
+
+📖 **For detailed Keycloak setup, see [KEYCLOAK.md](./KEYCLOAK.md)**
 # CLIENT_ID, CLIENT_SECRET, TENANT_ID
 ```
 
